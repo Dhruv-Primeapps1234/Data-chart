@@ -1,0 +1,342 @@
+     const ctx = document.getElementById('myChart');
+    let chart;
+
+    chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: {!! json_encode($labels) !!},
+        datasets: {!! json_encode([$datasets[0]]) !!}
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        },
+    onClick: function (event, elements) {
+
+    if (elements.length > 0) {
+        var clickedBarIndex = elements[0].index;
+        var clickedDatasetIndex = elements[0].datasetIndex;
+
+        // var clickedUserData = chart.data.labels;
+        var clickedUserData = chart.data.datasets[clickedDatasetIndex].data[clickedBarIndex];
+        var clickedUser = clickedUserData.labels;
+
+        // Update an HTML element with the clicked user data
+        document.getElementById('userInfo').innerText = 'Clicked User Data: ' + clickedUserData;
+    }
+    }
+    }
+});
+
+
+
+
+aastha =--------
+    $weekNumber = (int) substr($clickedDate, 5, 2); // Extract the week number
+    $year = (int) substr($clickedDate, -4); // Extract the year
+
+    $startOfWeek = Carbon::now()->setISODate($year, $weekNumber)->startOfWeek();
+    $endOfWeek = Carbon::now()->setISODate($year, $weekNumber)->endOfWeek();
+
+    
+
+     $queryBuilder = DB::table('assets')
+    //     ->leftJoin('asset_user', 'assets.created_by', '=', 'asset_user.id')
+    //     ->select('asset_user.name', DB::raw('COUNT(*) as count'))
+    //     ->whereYear('assets.created_at', '=', $year)
+    //     ->where(
+    //         function ($query) use ($startOfWeek, $endOfWeek) {
+    //             $query->where('assets.created_at', '>=', $startOfWeek)
+    //                 ->where('assets.created_at', '<=', $endOfWeek);
+    //         }
+    //     )
+    //     ->groupBy('asset_user.name');
+
+    // $result = $queryBuilder->get();
+
+    // \Log::info('Received Data: ' . json_encode($result));
+
+    // // Log the SQL query and bindings from the query builder, not the result
+    // $sql = $queryBuilder->toSql();
+    // $bindings = $queryBuilder->getBindings();
+
+    // \Log::info('SQL Query: ' . $sql);
+    // \Log::info('Bindings: ' . json_encode($bindings));
+
+    // $userCounts = $result->pluck('count', 'name')->toArray();
+    // return response()->json(['labels' => array_keys($userCounts), 'datasets' => [['data' => array_values($userCounts)]]]);
+
+
+
+
+
+
+
+<?php
+
+namespace App\Http\Controllers;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
+use Carbon\Carbon;
+
+class ChartController extends Controller
+{
+    public function datachart(Request $request)
+{
+    if ($request->ajax()) {
+        
+        $startDate = $request->input('startDate');
+        $endDate = $request->input('endDate');
+        $sport = $request->input('sport');
+        $timeRange = $request->input('timeRange');
+        $clickedDate = $request->input('clickedDate');
+        
+        $users = $this->getQueryBasedOnDateRange( $timeRange , $startDate, $endDate, $sport , $clickedDate);
+
+            // dd($users);
+
+        $colors = ['#ADE1FF'];
+        if ($startDate && $endDate) {
+            $startDate = Carbon::parse($startDate);
+            $endDate = Carbon::parse($endDate);  
+            switch ($timeRange) {
+                case 'day':
+                    for ($currentDate = $startDate; $currentDate->lte($endDate); $currentDate->addDay()) {
+                        $labels[] = $currentDate->format('Y-m-d');
+                    }
+                    break;
+                case 'week':
+                    for ($currentDate = $startDate; $currentDate->lte($endDate); $currentDate->addWeek()) {
+                        $labels[] = 'week-' . $currentDate->format('W-Y');
+                    }
+                    break;
+                case 'month':
+                    for ($currentDate = $startDate; $currentDate->lte($endDate); $currentDate->addMonth()) {
+                        $labels[] = $currentDate->format('M-Y');
+                    }
+                    break;
+                default:
+                    break;
+            }
+        } else {
+            for ($i = 11; $i > -1; $i--) {
+            switch ($timeRange) {
+                case 'day':
+                    $labels[] = Carbon::now()->subDays($i)->format('Y-m-d');
+                    break;
+                case 'week':
+                    $labels[] = 'week-' . Carbon::now()->subWeeks($i)->format('W-Y');
+                    break;
+                case 'month':
+                    $labels[] = Carbon::now()->subMonthsNoOverflow($i)->format('M-Y');
+                    break;
+                    default:
+                    $labels[] = '';
+                }
+            }
+        }
+
+        foreach ($labels as $label) {
+            $keyIndex = -1;
+            // dd($users->date);
+            foreach ($users as $index => $user) {
+                if ($user->date == $label) {
+                    $keyIndex = $index;
+                }
+            }
+            $mappedData[$label] = ($keyIndex !== -1) ? $users[$keyIndex]->count : 0;
+        }
+        // dd($labels);
+        $datasets = [
+            [
+                'label' => 'Users',
+                'data' =>array_values($mappedData),
+                'backgroundColor' => $colors,
+            ],
+        ];
+
+
+        if ($clickedDate && $timeRange) {
+            // dd($timeRange);
+            
+            $select = ['assets.*', 'asset_user.name']; // Include 'asset_user.name' in the select
+            $queryBuilder = DB::table('assets')
+                ->leftJoin('asset_user', 'assets.created_by', '=', 'asset_user.id')
+                ->select($select);
+
+            switch ($timeRange) {
+                case 'day':
+                    // dd($timeRange);
+
+                    $queryBuilder->whereDate('assets.created_at', '=', $clickedDate);
+                    break;
+                    case 'week':
+                    dd($user);
+                    $carbonDate = Carbon::parse($clickedDate);
+                    $weekNumber = $carbonDate->weekOfYear;
+                    $year = $carbonDate->format('Y');
+                    $startOfWeek = $carbonDate->startOfWeek();
+                    $endOfWeek = $carbonDate->endOfWeek();
+                    $queryBuilder->whereBetween('assets.created_at', [$startOfWeek, $endOfWeek]);
+
+                    // dd($queryBuilder);
+                    break;
+                case 'month':
+                    $carbonDate = Carbon::parse($clickedDate);
+                    $monthNumber = $carbonDate->format('m');
+                    $year = $carbonDate->format('Y');
+                    $queryBuilder->whereMonth('assets.created_at', '=', $monthNumber)
+                        ->whereYear('assets.created_at', '=', $year);
+                    break;
+                // Add more cases as needed
+
+                default:
+                    // Handle unknown time range
+                    dd($timeRange);
+                    $carbonDate = Carbon::parse($clickedDate);
+                    $weekNumber = $carbonDate->weekOfYear;
+                    $year = $carbonDate->format('Y');
+                    $startOfWeek = $carbonDate->startOfWeek();
+                    $endOfWeek = $carbonDate->endOfWeek();
+                    $queryBuilder->whereBetween('assets.created_at', [$startOfWeek, $endOfWeek]);
+                    break;
+            }
+
+    // Log the SQL query and bindings
+    $sql = $queryBuilder->toSql();
+    $bindings = $queryBuilder->getBindings();
+    \Log::info('SQL Query: ' . $sql);
+    \Log::info('Bindings: ' . json_encode($bindings));
+
+    $result = $queryBuilder->get();
+
+    // Initialize an empty array to store user counts
+    $userCounts = [];
+
+    // Iterate through each result item
+    foreach ($result as $item) {
+        $userName = $item->name ?: 'Unknown';
+        if (array_key_exists($userName, $userCounts)) {
+            $userCounts[$userName]++;
+        } else {
+            $userCounts[$userName] = 1;
+        }
+    }
+
+    $labels = array_keys($userCounts);
+    $datasets = [['data' => array_values($userCounts)]];
+
+
+    return response()->json(['labels' => $labels, 'datasets' => $datasets]);
+} else {
+    // Define $labels and $datasets if needed
+    return response()->json(['labels' => $labels, 'datasets' => $datasets]);
+}
+
+        
+
+
+
+    }
+    
+    // If it's not an AJAX request, return the normal view
+    $sports = DB::table('assets')->distinct()->pluck('sport');
+    $today = now(); 
+
+    $users = DB::table('assets')
+    ->selectRaw('DATE_FORMAT(created_at, "%Y-%m-%d") as date, COUNT(*) as count')
+    ->whereDate('created_at', '>=', $today->subDays(11)->toDateString()) // Fetch data for the last 12 days
+    ->groupBy('date')
+    ->orderBy('date')
+    ->get();
+
+    for ($i = 11; $i > -1; $i--) {
+    $labels[] = Carbon::now()->subDays($i)->format('Y-m-d');
+    }
+
+    $data = [];
+    $colors = ['#ADE1FF'];
+    foreach ($labels as $label) {
+        $keyIndex = -1;
+        foreach ($users as $index => $user) {
+            if ($user->date == $label) {
+                $keyIndex = $index;
+            }
+        }
+        $mappedData[$label] = ($keyIndex !== -1) ? $users[$keyIndex]->count : 0;
+    }
+    $datasets = [
+            [
+                'label' => 'Users',
+                'data' =>array_values($mappedData),
+                'backgroundColor' => $colors,
+            ],
+    ];
+    return view('charts', compact('datasets', 'labels', 'sports' ));
+}
+
+
+
+private function getQueryBasedOnDateRange($timeRange, $startDate, $endDate, $sport ,  $clickedDate )
+{
+    $query = DB::table('assets')
+        ->selectRaw($this->getDatePartBasedOnTimeRange($timeRange) . ' as date, COUNT(*) as count');
+
+    if ($startDate && $endDate) {
+        // Convert the input dates to the format expected by the database
+        $startDate = date('Y-m-d', strtotime($startDate));
+        $endDate = date('Y-m-d', strtotime($endDate));
+        $query->whereBetween('created_at', [$startDate, $endDate]);
+    } else {
+        $query->where('created_at', '>=', $this->getStartDateBasedOnTimeRange($timeRange));
+    }
+    if ($sport !== 'all') {
+        $query->where('sport', $sport);
+    }
+    $query->groupBy('date')
+        ->orderBy('date');
+
+    return $query->get();    
+}
+
+private function getDatePartBasedOnTimeRange($timeRange)
+{
+    switch ($timeRange) {
+        case 'day':
+            return 'DATE(created_at)';
+        case 'month':
+            return 'DATE_FORMAT(created_at, "%b-%Y")';
+        case 'week':
+            // return 'CONCAT("week-", DATE_FORMAT(created_at, "%U"), "-", DATE_FORMAT(created_at, "%Y"))';
+            return 'CONCAT("week-", DATE_FORMAT(DATE_SUB(created_at, INTERVAL (IF(DAYOFWEEK(created_at) = 1, 6, DAYOFWEEK(created_at)-2)) DAY), "%U"), "-", DATE_FORMAT(DATE_SUB(created_at, INTERVAL (IF(DAYOFWEEK(created_at) = 1, 6, DAYOFWEEK(created_at)-2)) DAY), "%Y"))';
+        default:
+            return 'DATE(created_at)';
+    }
+}
+
+
+private function getStartDateBasedOnTimeRange($timeRange)
+{
+    switch ($timeRange) {
+        case 'day':
+            return now()->subDays(12)->startOfDay();
+            break;
+        case 'month':
+            return now()->subMonths(11)->startOfMonth();
+            break;
+        case 'week':
+            // dd(now()->subWeeks(11)->startOfWeek(Carbon::MONDAY)->startOfDay());
+            return now()->subWeeks(11)->startOfWeek(Carbon::MONDAY)->startOfDay();
+            // return now()->subWeeks(11)->startOfDay();
+            break;
+        default:
+            return "";
+            break;
+    }
+}
+
+
+}
+

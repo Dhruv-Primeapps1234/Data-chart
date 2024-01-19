@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
+class PieController extends Controller
+{
+    public function pieChartdata(Request $request){
+        $selectedpoll = $request->input('datadate');
+        $interval = $request->input('interval');
+
+        $select = ['assets.created_by', 'asset_user.name', DB::raw('COALESCE(asset_user.name, "Unknown") as userName')];
+        $queryBuilder = DB::table('assets')
+                        ->leftJoin('asset_user', 'assets.created_by', '=', 'asset_user.id')
+                        ->select($select);
+
+        if ($interval === 'month') {
+            $dateComponents = explode(' ', $selectedpoll);
+            if (count($dateComponents) >= 2) {
+                $monthName = $dateComponents[0];
+                $year = $dateComponents[1];
+                $monthNumber = date('m', strtotime("$monthName 1, $year"));
+            }
+            $queryBuilder->whereMonth('assets.created_at', '=', $monthNumber)
+                         ->whereYear('assets.created_at', '=', $year);
+        } elseif($interval === 'week'){
+            $weekNumber = (int) substr($selectedpoll, 5, 2);
+            $date = Carbon::now()->setISODate(date('Y'), $weekNumber, 1);
+            $year = $date->format('Y');
+            $startOfWeek = Carbon::now()->setISODate($year, $weekNumber)->startOfWeek();
+            $endOfWeek = Carbon::now()->setISODate($year, $weekNumber)->endOfWeek();
+            $queryBuilder->whereBetween('assets.created_at', [$startOfWeek, $endOfWeek]);
+        }else {
+            $formattedDate = Carbon::createFromFormat('d-m-Y', $selectedpoll)->format('Y-m-d');
+            $queryBuilder->whereDate('assets.created_at', '=', $formattedDate);
+        }
+
+        $queryBuilder->groupBy('assets.created_by', 'asset_user.name')
+                     ->selectRaw('COALESCE(asset_user.name, "Unknown") as userName, count(*) as count')
+                     ->get();
+                     
+        $userCounts = $queryBuilder->pluck('count', 'userName')->toArray();
+
+        $color = ['#00529B', '#845F67', '#7F826E', '#AC9484', '#B7AFA0', '#B7AFA0', '#7F8378'];
+        $labels = array_keys($userCounts);
+        $datasets = [['data' => array_values($userCounts), 'backgroundColor' => array_values($color)]];
+        return response()->json(['labels' => $labels, 'datasets' => $datasets]);
+    }
+}
